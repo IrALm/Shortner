@@ -116,27 +116,6 @@ Retourne la liste complète, y compris le chemin vers le favicon (`faviconPath`)
 curl http://127.0.0.1:3000/stats/AbCdE1
 ```
 
----
-
-## ⚙️ Détail des Lambdas Background
-
-Ces fonctions ne sont pas exposées via l'API Gateway mais réagissent aux événements de données.
-
-### `fetch-favicon`
-- **Trigger** : Insertion dans la table `urls`.
-- **Action** :
-    1. Télécharge le `/favicon.ico` de l'URL cible.
-    2. Upload le fichier dans le bucket S3 (Minio en local).
-    3. Met à jour l'item DynamoDB avec `faviconPath`.
-- **Test Local** : Si le Stream Watcher est inactif, relancez-le ou invoquez manuellement. La fonction inclut un **mode Fallback** qui scanne la table pour trouver les favicons manquants au démarrage.
-
-### `stats-processor`
-- **Trigger** : Insertion dans la table `click_events`.
-- **Action** : Agrège les clics par jour dans `daily_stats`.
-- **Test Local** : Idem, inclut un **mode Fallback** qui recalcule les stats manquantes si le stream n'était pas actif lors du clic.
-
----
-
 ## 🐞 Debugging & Astuces
 
 ### Logs
