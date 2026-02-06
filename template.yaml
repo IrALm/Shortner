@@ -1,0 +1,245 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+
+Description: >
+  Application Serverless de raccourcissement d'URL
+  - API Gateway HTTP
+  - Lambdas Node.js
+  - DynamoDB (local ou AWS)
+  - DynamoDB Streams
+  - Bucket S3 pour favicons
+
+# ======================================================
+# Paramètres
+# ======================================================
+Parameters:
+  DynamoDBEndpoint:
+    Type: String
+    Default: "http://dynamodb-local:8000"
+    Description: Endpoint DynamoDB local (Docker)
+
+# ======================================================
+# Globals : variables d'environnement pour toutes les Lambdas
+# ======================================================
+Globals:
+  Function:
+    Runtime: nodejs20.x
+    Timeout: 10
+    Architectures:
+      - x86_64
+    Environment:
+      Variables:
+        AWS_REGION: !Ref AWS::Region
+        DYNAMODB_ENDPOINT: !Ref DynamoDBEndpoint
+        TABLE_URLS: urls
+        TABLE_CLICK_EVENTS: click_events
+        TABLE_DAILY_STATS: daily_stats
+
+# ======================================================
+# Ressources AWS
+# ======================================================
+Resources:
+
+  # -----------------------
+  # API Gateway HTTP
+  # -----------------------
+  HttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: Prod
+
+  # -----------------------
+  # Bucket S3 pour les favicons
+  # -----------------------
+  FaviconsBucket:
+    Type: AWS::S3::Bucket
+
+  # -----------------------
+  # Table DynamoDB : urls
+  # -----------------------
+  UrlsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: urls
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: shortKey
+          AttributeType: S
+      KeySchema:
+        - AttributeName: shortKey
+          KeyType: HASH
+      StreamSpecification:
+        StreamViewType: NEW_IMAGE
+
+  # -----------------------
+  # Table DynamoDB : click_events
+  # -----------------------
+  ClickEventsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: click_events
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: eventId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: eventId
+          KeyType: HASH
+      StreamSpecification:
+        StreamViewType: NEW_IMAGE
+
+  # -----------------------
+  # Table DynamoDB : daily_stats
+  # -----------------------
+  DailyStatsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: daily_stats
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: shortKey
+          AttributeType: S
+        - AttributeName: statDate
+          AttributeType: S
+      KeySchema:
+        - AttributeName: shortKey
+          KeyType: HASH
+        - AttributeName: statDate
+          KeyType: RANGE
+
+  # -----------------------
+  # Lambda : POST /shorten
+  # -----------------------
+  ShortenFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: handlers/shorten.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: urls
+      Events:
+        ShortenApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /shorten
+            Method: POST
+
+  # -----------------------
+  # Lambda : GET /{shortKey}
+  # -----------------------
+  RedirectFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: handlers/redirect.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: urls
+        - DynamoDBCrudPolicy:
+            TableName: click_events
+      Events:
+        RedirectApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /{shortKey}
+            Method: GET
+
+  # -----------------------
+  # Lambda : traitement automatique des stats
+  # -----------------------
+  StatsProcessorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: handlers/stats-processor.handler
+      Environment:
+        Variables:
+          TABLE_DAILY_STATS: !Ref DailyStatsTable
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: daily_stats
+      Events:
+        ClickEventsStream:
+          Type: DynamoDB
+          Properties:
+            Stream: !GetAtt ClickEventsTable.StreamArn
+            StartingPosition: TRIM_HORIZON
+            BatchSize: 10
+
+  # -----------------------
+  # Lambda : GET /stats/{shortKey}
+  # -----------------------
+  GetStatsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: handlers/get-stats.handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: daily_stats
+      Events:
+        GetStatsApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /stats/{shortKey}
+            Method: GET
+
+  # -----------------------
+  # Lambda : fetch-favicon
+  # -----------------------
+  FetchFaviconFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: handlers/fetch-favicon.handler
+      Environment:
+        Variables:
+          FAVICONS_BUCKET: !Ref FaviconsBucket
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: urls
+        - S3CrudPolicy:
+            BucketName: !Ref FaviconsBucket
+      Events:
+        UrlsStream:
+          Type: DynamoDB
+          Properties:
+            Stream: !GetAtt UrlsTable.StreamArn
+            StartingPosition: TRIM_HORIZON
+            BatchSize: 10
+  # -----------------------
+  # Lambda : GET /urls
+  # -----------------------
+  GetUrlsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: handlers/get-urls.handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: urls
+        - DynamoDBReadPolicy:
+            TableName: click_events
+      Events:
+        GetUrlsApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /urls
+            Method: GET
+
+# ======================================================
+# Outputs
+# ======================================================
+Outputs:
+  HttpApiUrl:
+    Description: URL de base de l’API HTTP
+    Value: !Sub "https://${HttpApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/Prod"
+
+  FaviconsBucketName:
+    Description: Nom du bucket S3 pour les favicons
+    Value: !Ref FaviconsBucket

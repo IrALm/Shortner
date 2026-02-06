@@ -1,0 +1,25 @@
+{
+  "name": "url-shortener",
+  "version": "1.0.0",
+  "description": "Serverless URL shortener with AWS SAM",
+  "main": "app.js",
+  "type": "module",              
+  "scripts": {
+    "start": "sam local start-api",
+    "build": "sam build",
+    "test": "mocha tests/unit/"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.337.0",
+    "@aws-sdk/lib-dynamodb": "^3.337.0",
+    "@aws-sdk/client-s3": "^3.337.0",
+    "node-fetch": "^3.3.2",
+    "uuid": "^9.0.0"
+  },
+  "devDependencies": {
+    "chai": "^4.3.6",
+    "mocha": "^10.2.0"
+  },
+  "author": "Leclerc",
+  "license": "MIT"
+}
