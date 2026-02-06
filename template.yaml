@@ -15,7 +15,7 @@ Description: >
 Parameters:
   DynamoDBEndpoint:
     Type: String
-    Default: "http://dynamodb-local:8000"
+    Default: "http://url-shortener-dynamodb:8000"
     Description: Endpoint DynamoDB local (Docker)
 
 # ======================================================
@@ -125,6 +125,12 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /shorten
             Method: POST
+      Environment:
+        Variables:
+          AWS_SAM_LOCAL: "true"
+          DOCKER_ENV: "false"
+          DYNAMODB_ENDPOINT: "http://url-shortener-dynamodb:8000"
+          TABLE_URLS: "urls"
 
   # -----------------------
   # Lambda : GET /{shortKey}
@@ -158,7 +164,10 @@ Resources:
       Environment:
         Variables:
           TABLE_DAILY_STATS: !Ref DailyStatsTable
+          TABLE_CLICK_EVENTS: !Ref ClickEventsTable
       Policies:
+        - DynamoDBReadPolicy:
+            TableName: click_events # Pour le scan local de fallback
         - DynamoDBCrudPolicy:
             TableName: daily_stats
       Events:
@@ -199,9 +208,10 @@ Resources:
       Environment:
         Variables:
           FAVICONS_BUCKET: !Ref FaviconsBucket
+          TABLE_URLS: !Ref UrlsTable
       Policies:
         - DynamoDBCrudPolicy:
-            TableName: urls
+            TableName: urls # Inclut Read pour le scan local
         - S3CrudPolicy:
             BucketName: !Ref FaviconsBucket
       Events:

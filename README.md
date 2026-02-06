@@ -134,8 +134,3 @@ Si vous avez inséré des données alors que le watcher était éteint, relancez
 # Dans le dossier src/
 node local-stream-watcher.js
 ```
-Ou invoquez une fonction spécifique :
-```bash
-sam local invoke FetchFaviconFunction -e events/event-mock.json
-```
-*(Le code détectera l'environnement local et passera en mode "Scan" pour rattraper le retard).*

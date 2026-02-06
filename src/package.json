@@ -3,16 +3,18 @@
   "version": "1.0.0",
   "description": "Serverless URL shortener with AWS SAM",
   "main": "app.js",
-  "type": "module",              
+  "type": "module",
   "scripts": {
-    "start": "sam local start-api",
+    "start": "sam local start-api --docker-network url-shortener_default",
+    "watch-streams": "node local-stream-watcher.js",
     "build": "sam build",
     "test": "mocha tests/unit/"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.337.0",
-    "@aws-sdk/lib-dynamodb": "^3.337.0",
+    "@aws-sdk/client-dynamodb-streams": "^3.984.0",
     "@aws-sdk/client-s3": "^3.337.0",
+    "@aws-sdk/lib-dynamodb": "^3.337.0",
     "node-fetch": "^3.3.2",
     "uuid": "^9.0.0"
   },

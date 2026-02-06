@@ -1,4 +1,4 @@
-/**
+ /**
  * Lambda : fetch-favicon
  * ----------------------
  * Déclenchée par INSERT dans la table urls.
