@@ -1,127 +1,214 @@
-# url-shortener
+# 🚀 Serverless URL Shortener
 
-This project contains source code and supporting files for a serverless application that you can deploy with the SAM CLI. It includes the following files and folders.
+![AWS Lambda](https://img.shields.io/badge/AWS%20Lambda-FF9900?style=for-the-badge&logo=aws-lambda&logoColor=white)
+![DynamoDB](https://img.shields.io/badge/Amazon%20DynamoDB-4053D6?style=for-the-badge&logo=amazon-dynamodb&logoColor=white)
+![Node.js](https://img.shields.io/badge/Node.js-43853D?style=for-the-badge&logo=node.js&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)
+![MinIO](https://img.shields.io/badge/MinIO-C72C48?style=for-the-badge&logo=minio&logoColor=white)
 
-- hello-world - Code for the application's Lambda function.
-- events - Invocation events that you can use to invoke the function.
-- hello-world/tests - Unit tests for the application code. 
-- template.yaml - A template that defines the application's AWS resources.
+Un service de raccourcissement d'URL moderne, **Event-Driven** et entièrement **Serverless**, conçu pour AWS mais exécutable localement avec une fidélité de production grâce à Docker, SAM CLI et un simulateur de streams maison.
 
-The application uses several AWS resources, including Lambda functions and an API Gateway API. These resources are defined in the `template.yaml` file in this project. You can update the template to add AWS resources through the same deployment process that updates your application code.
+---
 
-If you prefer to use an integrated development environment (IDE) to build and test your application, you can use the AWS Toolkit.  
-The AWS Toolkit is an open source plug-in for popular IDEs that uses the SAM CLI to build and deploy serverless applications on AWS. The AWS Toolkit also adds a simplified step-through debugging experience for Lambda function code. See the following links to get started.
+## 🏗️ Architecture
 
-* [CLion](https://docs.aws.amazon.com/toolkit-for-jetbrains/latest/userguide/welcome.html)
-* [GoLand](https://docs.aws.amazon.com/toolkit-for-jetbrains/latest/userguide/welcome.html)
-* [IntelliJ](https://docs.aws.amazon.com/toolkit-for-jetbrains/latest/userguide/welcome.html)
-* [WebStorm](https://docs.aws.amazon.com/toolkit-for-jetbrains/latest/userguide/welcome.html)
-* [Rider](https://docs.aws.amazon.com/toolkit-for-jetbrains/latest/userguide/welcome.html)
-* [PhpStorm](https://docs.aws.amazon.com/toolkit-for-jetbrains/latest/userguide/welcome.html)
-* [PyCharm](https://docs.aws.amazon.com/toolkit-for-jetbrains/latest/userguide/welcome.html)
-* [RubyMine](https://docs.aws.amazon.com/toolkit-for-jetbrains/latest/userguide/welcome.html)
-* [DataGrip](https://docs.aws.amazon.com/toolkit-for-jetbrains/latest/userguide/welcome.html)
-* [VS Code](https://docs.aws.amazon.com/toolkit-for-vscode/latest/userguide/welcome.html)
-* [Visual Studio](https://docs.aws.amazon.com/toolkit-for-visual-studio/latest/user-guide/welcome.html)
+Le projet repose sur une architecture événementielle asynchrone pour la scalabilité et la performance.
 
-## Deploy the sample application
+```mermaid
+graph TD
+    User((Utilisateur))
+    API[API Gateway HTTP]
+    
+    subgraph "Fonctions Synchrones (API)"
+        Shorten[λ shorten]
+        Redirect[λ redirect]
+        GetStats[λ get-stats]
+        GetUrls[λ get-urls]
+    end
 
-The Serverless Application Model Command Line Interface (SAM CLI) is an extension of the AWS CLI that adds functionality for building and testing Lambda applications. It uses Docker to run your functions in an Amazon Linux environment that matches Lambda. It can also emulate your application's build environment and API.
+    subgraph "Base de Données & Stockage"
+        DB[(DynamoDB)]
+        Bucket[S3 / Minio]
+    end
 
-To use the SAM CLI, you need the following tools.
+    subgraph "Background Processors (Async)"
+        Stream1[DynamoDB Stream (URLs)]
+        Stream2[DynamoDB Stream (Clicks)]
+        FaviconWorker[λ fetch-favicon]
+        StatsWorker[λ stats-processor]
+    end
 
-* SAM CLI - [Install the SAM CLI](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-sam-cli-install.html)
-* Node.js - [Install Node.js 22](https://nodejs.org/en/), including the NPM package management tool.
-* Docker - [Install Docker community edition](https://hub.docker.com/search/?type=edition&offering=community)
+    User -->|POST /shorten| API
+    User -->|GET /{id}| API
+    User -->|GET /stats| API
+    
+    API --> Shorten
+    API --> Redirect
+    API --> GetStats
+    API --> GetUrls
 
-To build and deploy your application for the first time, run the following in your shell:
+    Shorten -->|PutItem| DB
+    Redirect -->|GetItem + PutItem (Click)| DB
+    
+    DB --> Stream1
+    DB --> Stream2
+    
+    Stream1 -->|Trigger| FaviconWorker
+    Stream2 -->|Trigger| StatsWorker
+    
+    FaviconWorker -->|Download & Upload| Bucket
+    FaviconWorker -->|UpdateItem (Path)| DB
+    
+    StatsWorker -->|UpdateItem (Aggregates)| DB
+```
+
+### 🧩 Composants Principaux
+
+| Composant | Technologie | Description |
+|-----------|-------------|-------------|
+| **Core API** | AWS Lambda | Logique métier (Node.js 20). |
+| **Stockage** | DynamoDB | NoSQL rapide : Tables `urls`, `click_events`, `daily_stats`. |
+| **Assets** | S3 (AWS) / Minio (Local) | Stockage des favicons récupérés (`favicon.ico`). |
+| **Async Processing** | DynamoDB Streams | Déclenchement automatique des background jobs (stats, favicons). |
+| **Orchestration** | AWS SAM | Template `template.yaml` pour l'IaC (Infrastructure as Code). |
+
+---
+
+## 🛠️ Installation et Configuration Locale
+
+### Prérequis
+
+- **Docker** & **Docker Compose** (Pour simuler la DB et S3)
+- **Node.js 20+**
+- **AWS SAM CLI** (Pour l'émulation Lambda API)
+- **AWS CLI** (Optionnel, pour configurer des profils fictifs si besoin)
+
+### 1. Démarrer l'infrastructure (Docker)
+
+Lancez les conteneurs pour DynamoDB Local, DynamoDB Admin et Minio.
 
 ```bash
-sam build
-sam deploy --guided
+docker-compose up -d
 ```
+> **Vérification :**
+> - **DynamoDB Admin** : [http://localhost:8001](http://localhost:8001)
+> - **Minio Console** : [http://localhost:9001](http://localhost:9001) (User: `minioadmin`, Pass: `minioadmin`)
 
-The first command will build the source of your application. The second command will package and deploy your application to AWS, with a series of prompts:
-
-* **Stack Name**: The name of the stack to deploy to CloudFormation. This should be unique to your account and region, and a good starting point would be something matching your project name.
-* **AWS Region**: The AWS region you want to deploy your app to.
-* **Confirm changes before deploy**: If set to yes, any change sets will be shown to you before execution for manual review. If set to no, the AWS SAM CLI will automatically deploy application changes.
-* **Allow SAM CLI IAM role creation**: Many AWS SAM templates, including this example, create AWS IAM roles required for the AWS Lambda function(s) included to access AWS services. By default, these are scoped down to minimum required permissions. To deploy an AWS CloudFormation stack which creates or modifies IAM roles, the `CAPABILITY_IAM` value for `capabilities` must be provided. If permission isn't provided through this prompt, to deploy this example you must explicitly pass `--capabilities CAPABILITY_IAM` to the `sam deploy` command.
-* **Save arguments to samconfig.toml**: If set to yes, your choices will be saved to a configuration file inside the project, so that in the future you can just re-run `sam deploy` without parameters to deploy changes to your application.
-
-You can find your API Gateway Endpoint URL in the output values displayed after deployment.
-
-## Use the SAM CLI to build and test locally
-
-Build your application with the `sam build` command.
+### 2. Installer les dépendances
 
 ```bash
-url-shortener$ sam build
+cd src
+npm install
 ```
 
-The SAM CLI installs dependencies defined in `hello-world/package.json`, creates a deployment package, and saves it in the `.aws-sam/build` folder.
+### 3. Lancer l'API (SAM Local)
 
-Test a single function by invoking it directly with a test event. An event is a JSON document that represents the input that the function receives from the event source. Test events are included in the `events` folder in this project.
-
-Run functions locally and invoke them with the `sam local invoke` command.
+Dans un **premier terminal**, démarrez le serveur API local.
 
 ```bash
-url-shortener$ sam local invoke HelloWorldFunction --event events/event.json
+npm start
+# Ou directement : sam local start-api
 ```
+L'API est maintenant accessible sur `http://127.0.0.1:3000`.
 
-The SAM CLI can also emulate your application's API. Use the `sam local start-api` to run the API locally on port 3000.
+### 4. Lancer le Watcher de Streams ⚡
+
+SAM CLI ne gère pas nativement les triggers DynamoDB Streams en local. Nous utilisons un script dédié pour surveiller les changements et invoquer les lambdas.
+Dans un **second terminal** :
 
 ```bash
-url-shortener$ sam local start-api
-url-shortener$ curl http://localhost:3000/
+cd src
+npm run watch-streams
 ```
+> Ce processus détectera les ajouts dans `urls` et `click_events` et exécutera automatiquement les lambdas `fetch-favicon` et `stats-processor`.
 
-The SAM CLI reads the application template to determine the API's routes and the functions that they invoke. The `Events` property on each function's definition includes the route and method for each path.
+---
 
-```yaml
-      Events:
-        HelloWorld:
-          Type: Api
-          Properties:
-            Path: /hello
-            Method: get
-```
+## 📡 Utilisation des Endpoints
 
-## Add a resource to your application
-The application template uses AWS Serverless Application Model (AWS SAM) to define application resources. AWS SAM is an extension of AWS CloudFormation with a simpler syntax for configuring common serverless application resources such as functions, triggers, and APIs. For resources not included in [the SAM specification](https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md), you can use standard [AWS CloudFormation](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-template-resource-type-ref.html) resource types.
+### 1. Raccourcir une URL
 
-## Fetch, tail, and filter Lambda function logs
-
-To simplify troubleshooting, SAM CLI has a command called `sam logs`. `sam logs` lets you fetch logs generated by your deployed Lambda function from the command line. In addition to printing the logs on the terminal, this command has several nifty features to help you quickly find the bug.
-
-`NOTE`: This command works for all AWS Lambda functions; not just the ones you deploy using SAM.
+**POST** `/shorten`
 
 ```bash
-url-shortener$ sam logs -n HelloWorldFunction --stack-name url-shortener --tail
+curl -X POST http://127.0.0.1:3000/shorten \
+  -H "Content-Type: application/json" \
+  -d '{"longUrl": "https://www.google.com"}'
+```
+**Réponse :**
+```json
+{
+  "shortUrl": "http://127.0.0.1:3000/AbCdE1",
+  "shortKey": "AbCdE1"
+}
 ```
 
-You can find more information and examples about filtering Lambda function logs in the [SAM CLI Documentation](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-sam-cli-logging.html).
+### 2. Redirection (et comptage du clic)
 
-## Unit tests
+**GET** `/{shortKey}`
 
-Tests are defined in the `hello-world/tests` folder in this project. Use NPM to install the [Mocha test framework](https://mochajs.org/) and run unit tests.
+Ouvrez simplement l'URL dans votre navigateur : `http://127.0.0.1:3000/AbCdE1`
+
+> ⚙️ **Effet de bord** : Une entrée est créée dans `click_events`. Le **Stream Watcher** va la détecter et déclencher `stats-processor` pour incrémenter le compteur journalier.
+
+### 3. Voir les URLs créées
+
+**GET** `/urls`
 
 ```bash
-url-shortener$ cd hello-world
-hello-world$ npm install
-hello-world$ npm run test
+curl http://127.0.0.1:3000/urls
 ```
+Retourne la liste complète, y compris le chemin vers le favicon (`faviconPath`) si le traitement asynchrone est terminé.
 
-## Cleanup
+### 4. Voir les statistiques
 
-To delete the sample application that you created, use the AWS CLI. Assuming you used your project name for the stack name, you can run the following:
+**GET** `/stats/{shortKey}`
 
 ```bash
-sam delete --stack-name url-shortener
+curl http://127.0.0.1:3000/stats/AbCdE1
 ```
 
-## Resources
+---
 
-See the [AWS SAM developer guide](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/what-is-sam.html) for an introduction to SAM specification, the SAM CLI, and serverless application concepts.
+## ⚙️ Détail des Lambdas Background
 
-Next, you can use AWS Serverless Application Repository to deploy ready to use Apps that go beyond hello world samples and learn how authors developed their applications: [AWS Serverless Application Repository main page](https://aws.amazon.com/serverless/serverlessrepo/)
+Ces fonctions ne sont pas exposées via l'API Gateway mais réagissent aux événements de données.
+
+### `fetch-favicon`
+- **Trigger** : Insertion dans la table `urls`.
+- **Action** :
+    1. Télécharge le `/favicon.ico` de l'URL cible.
+    2. Upload le fichier dans le bucket S3 (Minio en local).
+    3. Met à jour l'item DynamoDB avec `faviconPath`.
+- **Test Local** : Si le Stream Watcher est inactif, relancez-le ou invoquez manuellement. La fonction inclut un **mode Fallback** qui scanne la table pour trouver les favicons manquants au démarrage.
+
+### `stats-processor`
+- **Trigger** : Insertion dans la table `click_events`.
+- **Action** : Agrège les clics par jour dans `daily_stats`.
+- **Test Local** : Idem, inclut un **mode Fallback** qui recalcule les stats manquantes si le stream n'était pas actif lors du clic.
+
+---
+
+## 🐞 Debugging & Astuces
+
+### Logs
+- **API** : Visibles dans le terminal où `sam local start-api` tourne.
+- **Streams** : Visibles dans le terminal où `npm run watch-streams` tourne.
+
+### Visualisation des Données
+Utilisez **dynamodb-admin** sur [http://localhost:8001](http://localhost:8001) pour voir le contenu brut des tables :
+- `urls` : Vérifiez la colonne `faviconPath`.
+- `click_events` : Vérifiez que les clics sont enregistrés.
+- `daily_stats` : Vérifiez que les clics sont bien agrégés.
+
+### Forcer le traitement (Scan)
+Si vous avez inséré des données alors que le watcher était éteint, relancez simplement :
+```bash
+# Dans le dossier src/
+node local-stream-watcher.js
+```
+Ou invoquez une fonction spécifique :
+```bash
+sam local invoke FetchFaviconFunction -e events/event-mock.json
+```
+*(Le code détectera l'environnement local et passera en mode "Scan" pour rattraper le retard).*
