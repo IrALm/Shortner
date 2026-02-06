@@ -10,58 +10,6 @@ Un service de raccourcissement d'URL moderne, **Event-Driven** et entièrement *
 
 ---
 
-## 🏗️ Architecture
-
-Le projet repose sur une architecture événementielle asynchrone pour la scalabilité et la performance.
-
-```mermaid
-graph TD
-    User((Utilisateur))
-    API[API Gateway HTTP]
-    
-    subgraph "Fonctions Synchrones (API)"
-        Shorten[λ shorten]
-        Redirect[λ redirect]
-        GetStats[λ get-stats]
-        GetUrls[λ get-urls]
-    end
-
-    subgraph "Base de Données & Stockage"
-        DB[(DynamoDB)]
-        Bucket[S3 / Minio]
-    end
-
-    subgraph "Background Processors (Async)"
-        Stream1[DynamoDB Stream (URLs)]
-        Stream2[DynamoDB Stream (Clicks)]
-        FaviconWorker[λ fetch-favicon]
-        StatsWorker[λ stats-processor]
-    end
-
-    User -->|POST /shorten| API
-    User -->|GET /{id}| API
-    User -->|GET /stats| API
-    
-    API --> Shorten
-    API --> Redirect
-    API --> GetStats
-    API --> GetUrls
-
-    Shorten -->|PutItem| DB
-    Redirect -->|GetItem + PutItem (Click)| DB
-    
-    DB --> Stream1
-    DB --> Stream2
-    
-    Stream1 -->|Trigger| FaviconWorker
-    Stream2 -->|Trigger| StatsWorker
-    
-    FaviconWorker -->|Download & Upload| Bucket
-    FaviconWorker -->|UpdateItem (Path)| DB
-    
-    StatsWorker -->|UpdateItem (Aggregates)| DB
-```
-
 ### 🧩 Composants Principaux
 
 | Composant | Technologie | Description |
