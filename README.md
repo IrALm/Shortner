@@ -49,7 +49,7 @@ node src/lib/init-dynamodb.js # Pour créer les tables
 ### 3. Lancer l'API (SAM Local)
 
 ```bash
-sam local start-api --docker-network url-shortener-net
+sam local start-api --docker-network url-shortener_net
 ```
 
 ---
