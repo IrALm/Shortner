@@ -1,5 +1,5 @@
 networks:
-  url-shortener-net:
+  net:
     driver: bridge
 
 services:
@@ -10,7 +10,7 @@ services:
     ports:
       - "8000:8000"
     networks:
-      - url-shortener-net
+      - net
     healthcheck:
       test: ["CMD", "curl", "-s", "http://localhost:8000/shell"]
       interval: 2s
@@ -30,7 +30,7 @@ services:
       dynamodb-local:
         condition: service_healthy
     networks:
-      - url-shortener-net
+      - net
     restart: unless-stopped
 
   minio:
@@ -44,7 +44,7 @@ services:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
     networks:
-      - url-shortener-net
+      - net
     restart: unless-stopped
 
   watcher:
@@ -53,7 +53,7 @@ services:
       dockerfile: Dockerfile.watcher
     container_name: url-shortener-watcher
     networks:
-      - url-shortener-net
+      - net
     environment:
       AWS_REGION: eu-west-1
       DYNAMODB_ENDPOINT: http://url-shortener-dynamodb:8000
