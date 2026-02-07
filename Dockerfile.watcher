@@ -1,0 +1,19 @@
+# Dockerfile.watcher
+
+# Utiliser Node 20 officiel
+FROM node:20
+
+# Répertoire de travail dans le container
+WORKDIR /app
+
+# Copier package.json et package-lock.json depuis src/
+COPY src/package*.json ./
+
+# Installer les dépendances
+RUN npm install
+
+# Copier tout le code depuis src/ dans /app
+COPY src/ .
+
+# Commande par défaut pour lancer le watcher
+CMD ["npm", "run", "watch-streams"]

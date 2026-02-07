@@ -1,4 +1,7 @@
-version: '3.8'
+networks:
+  url-shortener-net:
+    driver: bridge
+
 services:
   dynamodb-local:
     image: amazon/dynamodb-local:latest
@@ -6,7 +9,15 @@ services:
     command: "-jar DynamoDBLocal.jar -sharedDb -inMemory"
     ports:
       - "8000:8000"
-    working_dir: /home/dynamodblocal
+    networks:
+      - url-shortener-net
+    healthcheck:
+      test: ["CMD", "curl", "-s", "http://localhost:8000/shell"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+      start_period: 5s
+    restart: unless-stopped
 
   dynamodb-admin:
     image: aaronshaf/dynamodb-admin:latest
@@ -14,9 +25,13 @@ services:
     ports:
       - "8001:8001"
     environment:
-      DYNAMO_ENDPOINT: http://dynamodb-local:8000
+      DYNAMO_ENDPOINT: http://url-shortener-dynamodb:8000
     depends_on:
-      - dynamodb-local
+      dynamodb-local:
+        condition: service_healthy
+    networks:
+      - url-shortener-net
+    restart: unless-stopped
 
   minio:
     image: minio/minio:latest
@@ -28,3 +43,32 @@ services:
     environment:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
+    networks:
+      - url-shortener-net
+    restart: unless-stopped
+
+  watcher:
+    build:
+      context: .
+      dockerfile: Dockerfile.watcher
+    container_name: url-shortener-watcher
+    networks:
+      - url-shortener-net
+    environment:
+      AWS_REGION: eu-west-1
+      DYNAMODB_ENDPOINT: http://url-shortener-dynamodb:8000
+      S3_ENDPOINT: http://url-shortener-minio:9000
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
+      TABLE_URLS: urls
+      TABLE_CLICK_EVENTS: click_events
+      TABLE_DAILY_STATS: daily_stats
+      FAVICONS_BUCKET: favicons
+      AWS_SAM_LOCAL: "true"
+      ENABLE_DDB_STREAMS: "true"
+    depends_on:
+      dynamodb-local:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    restart: unless-stopped

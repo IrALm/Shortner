@@ -4,10 +4,9 @@ import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 
 const isLocal = process.env.AWS_SAM_LOCAL === "true";
 
-// ⚠️ Endpoint UNIQUEMENT pour accès runtime
-const dynamoEndpoint = isLocal
+const dynamoEndpoint = process.env.DYNAMODB_ENDPOINT || (isLocal
   ? "http://url-shortener-dynamodb:8000" // recommandé avec SAM
-  : undefined;
+  : undefined);
 
 // Client bas niveau
 const dynamoClient = new DynamoDBClient({
@@ -15,9 +14,9 @@ const dynamoClient = new DynamoDBClient({
   endpoint: dynamoEndpoint,
   credentials: isLocal
     ? {
-        accessKeyId: "test",
-        secretAccessKey: "test",
-      }
+      accessKeyId: "test",
+      secretAccessKey: "test",
+    }
     : undefined,
 });
 

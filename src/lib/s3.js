@@ -13,6 +13,8 @@ const REGION = process.env.AWS_REGION || "eu-west-1";
 const ENDPOINT =
   process.env.S3_ENDPOINT || (isLocal ? "http://localhost:9000" : undefined);
 
+console.log(`[S3] Using Endpoint: ${ENDPOINT || "AWS Standard"}`);
+
 const BUCKET_NAME =
   process.env.FAVICONS_BUCKET || (isLocal ? "favicons" : null);
 
