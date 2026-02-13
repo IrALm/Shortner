@@ -30,6 +30,7 @@ Un service de raccourcissement d'URL moderne, **Event-Driven** et entièrement *
 - **Node.js 20+**
 - **AWS SAM CLI** (Pour l'émulation Lambda API)
 - **AWS CLI** (Optionnel, pour configurer des profils fictifs si besoin)
+- **npm install @aws-sdk/client-dynamodb  npm install @aws-sdk/client-s3** exécuter ces deux commandes pour ajouter les dépendances nécessaires
 
 ### 1. Démarrer l'infrastructure (Docker)
 
